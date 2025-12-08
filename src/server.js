@@ -10,7 +10,11 @@ const PORT = process.env.PORT || 3000;
 
 // Middlewares
 app.use(cors({
-  origin: ['http://localhost:4200'], // add your Angular dev URL + prod domain
+  origin: [
+    'http://localhost:4200',
+    'https://rohitnair321.github.io/Rohit-Nair296/',
+    'https://rohitnair321.github.io/'
+  ], // add your Angular dev URL + prod domain
   credentials: true,
 }));
 app.use(express.json());
@@ -26,6 +30,6 @@ app.use('/api/auth', authRoutes);
 // TODO: other routes (projects, profile, etc.)
 // app.use('/api/projects', projectRoutes);
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Server started on port ${PORT}`);
 });
