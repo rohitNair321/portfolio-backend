@@ -14,7 +14,8 @@ app.use(cors({
   origin: [
     'http://localhost:4200',
     'https://rohitnair321.github.io/Rohit-Nair296/',
-    'https://rohitnair321.github.io/'
+    'https://rohitnair321.github.io/',
+    'https://portfolio-backend-bpmw.onrender.com'
   ], // add your Angular dev URL + prod domain
   credentials: true,
 }));
