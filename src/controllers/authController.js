@@ -162,37 +162,37 @@ async function forgotPassword(req, res) {
     const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:4200'}/reset-password?token=${resetToken}`;
 
     // Send email or log link
-    if (process.env.NODE_ENV === 'production') {
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
+    if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'development') {
+      const nodemailer = require('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT || 587),
+        secure: false,
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASS,
+        },
+      });
 
-    await transporter.verify((err, success) => {
-      if (err) {
-        console.error('❌ SMTP connection error:', err.message);
-      } else {
-        console.log('✅ SMTP server is ready to take messages');
-      }
-    });
+      await transporter.verify((err, success) => {
+        if (err) {
+          console.error('❌ SMTP connection error:', err.message);
+        } else {
+          console.log('✅ SMTP server is ready to take messages');
+        }
+      });
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || '"Support" <support@example.com>',
-      to: user.email,
-      subject: 'Password Reset Instructions',
-      html: `
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || '"Support" <support@example.com>',
+        to: user.email,
+        subject: 'Password Reset Instructions',
+        html: `
           <p>Hello ${user.name},</p>
           <p>You requested a password reset. Click the link below to set a new password:</p>
           <p><a href="${resetLink}">${resetLink}</a></p>
           <p>If you did not request this, you can ignore this email.</p>
         `,
-    });
+      });
     } else {
       console.log(`[DEV] Password reset link for ${user.email}: ${resetLink}`);
     }

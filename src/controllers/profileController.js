@@ -111,7 +111,7 @@ async function updateMyProfile(req, res) {
     const {
       name, full_name, description, email, primaryPhone, primary_phone,
       secondaryPhone, secondary_phone, location, website, linkedin, github,
-      openToWork, open_to_work, skills, experiences
+      openToWork, open_to_work, skills, experiences, logo_initials, currenttheme, themes
     } = req.body;
 
     const payload = {
@@ -124,11 +124,14 @@ async function updateMyProfile(req, res) {
       website: website || null,
       linkedin: linkedin || null,
       github: github || null,
+      logo_initials: logo_initials || null,
       open_to_work:
         openToWork === 'true' ||
         openToWork === true ||
         open_to_work === 'true' ||
         open_to_work === true,
+      currenttheme: currenttheme || null,
+      themes: parseJsonField(themes),
       skills: parseJsonField(skills),
       experiences: parseJsonField(experiences)
     };
