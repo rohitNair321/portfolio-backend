@@ -107,7 +107,6 @@ async function updateMyProfile(req, res) {
       });
     }
     const userId = req.user.id;
-    console.log('UPDATE PROFILE → req.user:', req.user);
     const {
       name, full_name, description, email, primaryPhone, primary_phone,
       secondaryPhone, secondary_phone, location, website, linkedin, github,
