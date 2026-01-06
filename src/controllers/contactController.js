@@ -23,12 +23,14 @@ async function submitContactForm(req, res) {
       port: process.env.SMTP_PORT,
       secure: true,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      socketOptions: {
-        family: 4 // Force IPv4
-      },
       tls: {
-        rejectUnauthorized: false // Helps if there's a certificate mismatch
-      }
+        family: 4, // Forces IPv4
+        rejectUnauthorized: false
+      },
+      // Add these timeout settings to give Render more time to connect
+      connectionTimeout: 10000, // 10 seconds
+      socketTimeout: 10000,
+      greetingTimeout: 10000,
     });
 
     transporter.verify((error, success) => {
