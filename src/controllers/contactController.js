@@ -21,7 +21,23 @@ async function submitContactForm(req, res) {
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST,
       port: process.env.SMTP_PORT,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      secure: true,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      socketOptions: {
+        family: 4 // Force IPv4
+      },
+      tls: {
+        rejectUnauthorized: false // Helps if there's a certificate mismatch
+      }
+    });
+
+    transporter.verify((error, success) => {
+      if (error) {
+        console.log('❌ SMTP Connection Error:');
+        console.error(error);
+      } else {
+        console.log('✅ Mail server connection is successful! Ready to send emails.');
+      }
     });
 
     await transporter.sendMail({
