@@ -2,6 +2,31 @@ const { supabase } = require('../db/supabaseClient');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 
+// 2. Send Email (SMTP)
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_PORT,
+  secure: true,
+  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  tls: {
+    family: 4, // Forces IPv4
+    rejectUnauthorized: false
+  },
+  // Add these timeout settings to give Render more time to connect
+  connectionTimeout: 10000, // 10 seconds
+  socketTimeout: 10000,
+  greetingTimeout: 10000,
+});
+
+transporter.verify((error, success) => {
+  if (error) {
+    console.log('❌ SMTP Connection Error:');
+    console.error(error);
+  } else {
+    console.log('✅ Mail server connection is successful! Ready to send emails.');
+  }
+});
+
 //#region Submit Contact Form
 async function submitContactForm(req, res) {
   try {
@@ -10,37 +35,11 @@ async function submitContactForm(req, res) {
     if (!firstName || !email || !message) {
       return res.status(400).json({ message: 'Missing fields.' });
     }
-
     const { error: dbError } = await supabase
       .from('contact_messages')
       .insert([{ first_name: firstName, last_name: lastName, email, message }]);
 
     if (dbError) throw dbError;
-
-    // 2. Send Email (SMTP)
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: true,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      tls: {
-        family: 4, // Forces IPv4
-        rejectUnauthorized: false
-      },
-      // Add these timeout settings to give Render more time to connect
-      connectionTimeout: 10000, // 10 seconds
-      socketTimeout: 10000,
-      greetingTimeout: 10000,
-    });
-
-    transporter.verify((error, success) => {
-      if (error) {
-        console.log('❌ SMTP Connection Error:');
-        console.error(error);
-      } else {
-        console.log('✅ Mail server connection is successful! Ready to send emails.');
-      }
-    });
 
     await transporter.sendMail({
       from: `"Contact" <${process.env.SMTP_USER}>`,
@@ -49,8 +48,8 @@ async function submitContactForm(req, res) {
       // text: `From: ${firstName} ${lastName}\nEmail: ${email}\n\nMessage: ${message}`,
       html: `
           <p>Dear Rohit Nair,</p>
-          <p>You have received a new message from your portfolio website.</p>
-          <p> ${firstName} ${lastName} has sent a message to you.</p>
+          <p>You have received a new message</p>
+          <p>By ${firstName} ${lastName} has sent a message to you, who has visited your portfolio.</p>
           <p>Message: ${message}</p>
         `,
     });
