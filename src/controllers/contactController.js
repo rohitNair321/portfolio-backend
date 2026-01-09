@@ -1,58 +1,48 @@
 const { supabase } = require('../db/supabaseClient');
-const nodemailer = require('nodemailer');
 const axios = require('axios');
-
-// 2. Send Email (SMTP)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: process.env.SMTP_PORT,
-  secure: true,
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-  tls: {
-    family: 4, // Forces IPv4
-    rejectUnauthorized: false
-  },
-  // Add these timeout settings to give Render more time to connect
-  connectionTimeout: 10000, // 10 seconds
-  socketTimeout: 10000,
-  greetingTimeout: 10000,
-});
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.log('❌ SMTP Connection Error:');
-    console.error(error);
-  } else {
-    console.log('✅ Mail server connection is successful! Ready to send emails.');
-  }
-});
 
 //#region Submit Contact Form
 async function submitContactForm(req, res) {
+
+  const { firstName, lastName, email, message } = req.body;
   try {
-    const { firstName, lastName, email, message } = req.body;
+
+    // Replace Nodemailer with Resend API
+    // const { data, error: mailError } = await resend.emails.send({
+    //   from: 'Portfolio <onboarding@resend.dev>', // Resend's default for free accounts
+    //   to: process.env.SMTP_USER,       // YOUR GMAIL HERE
+    //   subject: `New Contact from ${firstName} ${lastName}`,
+    //   html: `
+    //       <p>Dear Rohit Nair,</p>
+    //       <p>You have received a new message</p>
+    //       <p>By ${firstName} ${lastName}, has sent a message to you, who has visited your portfolio.</p>
+    //       <p>Message: ${message}</p>
+    //   `
+    // });
+
+    // if (mailError) {
+    //   console.error('Email failed to send:', mailError);
+    //   return res.status(500).json({
+    //     message: 'Could not send email, we have informed to the admin.'
+    //   });
+    // }
 
     if (!firstName || !email || !message) {
       return res.status(400).json({ message: 'Missing fields.' });
     }
+
     const { error: dbError } = await supabase
       .from('contact_messages')
-      .insert([{ first_name: firstName, last_name: lastName, email, message }]);
+      .insert([{
+        profile_id: process.env.PROFILE_OWNER_ID,
+        first_name: firstName, last_name: lastName, email, message,
+        ip_address: req.headers['x-forwarded-for']?.split(',')[0] || req.ip,
+        user_agent: req.headers['user-agent']
+      }]);
 
-    if (dbError) throw dbError;
-
-    await transporter.sendMail({
-      from: `"Contact" <${process.env.SMTP_USER}>`,
-      to: process.env.SMTP_USER,
-      subject: `New Message from ${firstName} ${lastName}`,
-      // text: `From: ${firstName} ${lastName}\nEmail: ${email}\n\nMessage: ${message}`,
-      html: `
-          <p>Dear Rohit Nair,</p>
-          <p>You have received a new message</p>
-          <p>By ${firstName} ${lastName} has sent a message to you, who has visited your portfolio.</p>
-          <p>Message: ${message}</p>
-        `,
-    });
+    if (dbError) {
+      console.error('Email sent but DB insert failed:', dbError);
+    }
 
     // 3. Fast2SMS Integration (Indian SMS Service)
     if (process.env.ENABLE_SMS === 'true') {
@@ -138,4 +128,27 @@ async function fetchFormattedNotifications() {
 }
 // #endregion
 
-module.exports = { submitContactForm, getNotifications, markAsRead };
+// #region Delete Contact Message
+async function deleteContactMessage(req, res) {
+  const { id } = req.params;
+
+  try {
+    const { error } = await supabase
+      .from('contact_messages')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+
+    // 2. Fetch the updated list using the helper
+    const updatedData = await fetchFormattedNotifications();
+
+    // 3. Return the full updated state
+    return res.status(200).json(updatedData);
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+}
+// #endregion
+
+module.exports = { submitContactForm, getNotifications, markAsRead, deleteContactMessage };
