@@ -1,5 +1,6 @@
 const { supabase } = require('../db/supabaseClient');
 const axios = require('axios');
+const validator = require('validator');
 
 //#region Submit Contact Form
 async function submitContactForm(req, res) {
@@ -7,25 +8,16 @@ async function submitContactForm(req, res) {
   const { firstName, lastName, email, message } = req.body;
   try {
 
-    // Replace Nodemailer with Resend API
-    // const { data, error: mailError } = await resend.emails.send({
-    //   from: 'Portfolio <onboarding@resend.dev>', // Resend's default for free accounts
-    //   to: process.env.SMTP_USER,       // YOUR GMAIL HERE
-    //   subject: `New Contact from ${firstName} ${lastName}`,
-    //   html: `
-    //       <p>Dear Rohit Nair,</p>
-    //       <p>You have received a new message</p>
-    //       <p>By ${firstName} ${lastName}, has sent a message to you, who has visited your portfolio.</p>
-    //       <p>Message: ${message}</p>
-    //   `
-    // });
+    // Validate and Sanitize specifically
+    if (!validator.isEmail(email)) {
+      return res.status(400).json({ message: 'Invalid email address.' });
+    }
 
-    // if (mailError) {
-    //   console.error('Email failed to send:', mailError);
-    //   return res.status(500).json({
-    //     message: 'Could not send email, we have informed to the admin.'
-    //   });
-    // }
+    // Escape special characters (< becomes &lt;)
+    firstName = validator.escape(firstName);
+    lastName = validator.escape(lastName);
+    email = validator.escape(email);
+    message = validator.escape(message);
 
     if (!firstName || !email || !message) {
       return res.status(400).json({ message: 'Missing fields.' });

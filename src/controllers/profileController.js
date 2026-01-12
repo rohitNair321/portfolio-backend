@@ -1,7 +1,9 @@
 // controllers/profileController.js
+
 const { supabase } = require('../db/supabaseClient');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
+const validator = require('validator');
 
 const BUCKET = process.env.ASSET_BUCKET || 'assets';   // <-- updated to single bucket
 
@@ -113,23 +115,25 @@ async function updateMyProfile(req, res) {
       openToWork, open_to_work, skills, experiences, logo_initials, currenttheme, themes
     } = req.body;
 
+
+    // Sanitize all string fields to prevent XSS
     const payload = {
-      full_name: full_name || name || null,
-      description: description || null,
-      email: email || null,
-      primary_phone: primaryPhone || primary_phone || null,
-      secondary_phone: secondaryPhone || secondary_phone || null,
-      location: location || null,
-      website: website || null,
-      linkedin: linkedin || null,
-      github: github || null,
-      logo_initials: logo_initials || null,
+      full_name: full_name ? validator.escape(full_name) : (name ? validator.escape(name) : null),
+      description: description ? validator.escape(description) : null,
+      email: email ? validator.escape(email) : null,
+      primary_phone: primaryPhone ? validator.escape(primaryPhone) : (primary_phone ? validator.escape(primary_phone) : null),
+      secondary_phone: secondaryPhone ? validator.escape(secondaryPhone) : (secondary_phone ? validator.escape(secondary_phone) : null),
+      location: location ? validator.escape(location) : null,
+      website: website ? validator.escape(website) : null,
+      linkedin: linkedin ? validator.escape(linkedin) : null,
+      github: github ? validator.escape(github) : null,
+      logo_initials: logo_initials ? validator.escape(logo_initials) : null,
       open_to_work:
         openToWork === 'true' ||
         openToWork === true ||
         open_to_work === 'true' ||
         open_to_work === true,
-      currenttheme: currenttheme || null,
+      currenttheme: currenttheme ? validator.escape(currenttheme) : null,
       themes: parseJsonField(themes),
       skills: parseJsonField(skills),
       experiences: parseJsonField(experiences)
