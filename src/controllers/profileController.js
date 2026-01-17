@@ -27,27 +27,6 @@ function parseJsonField(value) {
 }
 // #endregion
 
-//#region JWT setup for public portfolio token
-async function token(req, res) {
-  try {
-    const payload = {
-      sub: 'f135bcee-bad6-4634-86e1-36e77760932f',
-      role: 'user',
-    };
-
-    const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '2h' });
-
-    return res.json({
-      success: true,
-      token,
-    });
-  } catch (error) {
-    console.error('Portfolio token error:', error);
-    return res.status(500).json({ message: 'Failed to generate portfolio token' });
-  }
-}
-//#endregion
-
 //#region Helper to upsert profile row upsertProfileRow
 async function upsertProfileRow(userId, payload) {
   if (!userId || userId === 'public-portfolio') {
@@ -224,7 +203,6 @@ async function downloadResume(req, res) {
 // #endregion
 
 module.exports = {
-  token,
   getMyProfile,
   updateMyProfile,
   downloadResume
