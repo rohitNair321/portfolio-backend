@@ -5,7 +5,7 @@ const validator = require('validator');
 //#region Submit Contact Form
 async function submitContactForm(req, res) {
 
-  const { firstName, lastName, email, message } = req.body;
+  let { firstName, lastName, email, message } = req.body;
   try {
 
     // Validate and Sanitize specifically

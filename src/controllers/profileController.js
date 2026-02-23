@@ -71,6 +71,25 @@ async function getMyProfile(req, res) {
       console.error('Supabase error fetching profile:', error);
       return res.status(500).json({ message: 'Error fetching profile' });
     }
+
+    if (data) {
+      // Calculate projectCount
+      const projectCount = (data.experiences || []).reduce((total, exp) => {
+        return total + (exp.projects?.length || 0);
+      }, 0);
+
+      // Calculate companyCount
+      const companyCount = (data.experiences || []).length;
+
+      // Get currentCompany
+      const currentCompany = (data.experiences || []).find(exp => exp.present === true)?.company || null;
+
+      // Add computed fields to response
+      data.projectCount = projectCount;
+      data.companyCount = companyCount;
+      data.currentCompany = currentCompany;
+    }
+
     return res.json({ profile: data || null });
   } catch (err) {
     console.error(err);
@@ -163,6 +182,22 @@ async function updateMyProfile(req, res) {
     Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
 
     const saved = await upsertProfileRow(userId, payload);
+    
+    // Calculate projectCount
+    const projectCount = (saved.experiences || []).reduce((total, exp) => {
+      return total + (exp.projects?.length || 0);
+    }, 0);
+
+    // Calculate companyCount
+    const companyCount = (saved.experiences || []).length;
+
+    // Get currentCompany
+    const currentCompany = (saved.experiences || []).find(exp => exp.present === true)?.company || null;
+
+    // Add computed fields to response
+    saved.projectCount = projectCount;
+    saved.companyCount = companyCount;
+    saved.currentCompany = currentCompany;
 
     return res.json({ profile: saved });
   } catch (err) {
