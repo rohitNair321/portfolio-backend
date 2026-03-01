@@ -185,8 +185,57 @@ async function resetPassword(req, res) {
   }
 }
 
+async function updatePassword(req, res) {
+  try {
+    const { email, currentPassword, newPassword } = req.body;
+    // 1. Fetch the user's current record from Supabase
+    const { data: user, error: fetchError } = await supabase
+      .from('users')
+      .select('password_hash, email')
+      .eq('email', email)
+      .single();
+
+    if (fetchError || !user) {
+      return res.status(404).json({ message: "Administrator record not found." });
+    }
+
+    // 2. Verify the CURRENT password
+    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!isMatch) {
+      return res.status(401).json({ message: "Current password verification failed." });
+    }
+
+    // 3. Hash the NEW password
+    const salt = await bcrypt.genSalt(12);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // 4. Update Supabase
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        password_hash: hashedPassword,
+        updated_at: new Date()
+      })
+      .eq('email', email);
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Credentials updated in secure storage."
+    });
+
+  } catch (error) {
+    console.error("Password Update Error:", error);
+    res.status(500).json({ message: "Internal server error during password update." });
+  }
+};
+
 module.exports = {
   loginUser,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  updatePassword
 };
