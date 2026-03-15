@@ -8,6 +8,7 @@ const { xss } = require('express-xss-sanitizer');
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const contactRoutes = require('./routes/contactRoutes');
+const chatRoutes = require('./routes/chatRoutes')
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const path = require('path');
@@ -139,6 +140,8 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/ai', chatRoutes);
+app.use('/api/chat', chatRoutes);
 checkSupabaseConnection();
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`✅ Server started on port ${PORT}`);
