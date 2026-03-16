@@ -14,20 +14,18 @@ async function chat(req, res) {
       req.headers["x-forwarded-for"] ||
       req.socket.remoteAddress;
 
-    const isAdmin = req.user?.role === "admin";
-    console.log("isAdmin", { isAdmin});
-    // -------- limit check --------
+    const isAdmin = role === "ADMIN";
 
     if (!isAdmin) {
 
       const count = await checkGuestLimit(ip);
-      console.log("guest session count", { count });
+
       if (count >= 5) {
 
         return res.json({
           limitReached: true,
           message:
-            "Chat limit reached. Contact Rohit for more access."
+            "Limit reached. Please contact Rohit using contact section."
         });
 
       }
@@ -213,7 +211,6 @@ async function getSessions(req, res) {
       req.headers["x-forwarded-for"] ||
       req.socket?.remoteAddress ||
       "unknown";
-    console.log("getSessions", { role, ip });
     let query = supabase
       .from("chat_sessions")
       .select("*")
@@ -229,13 +226,8 @@ async function getSessions(req, res) {
         .eq("user_id", userId);
     }
 
-    // if (userId) {
-    //   query = query.eq("user_id", userId);
-    // }
-
     const { data, error } = await query;
 
-    // console.log("sessions", { data, error });
 
     if (error) return res.json([]);
 

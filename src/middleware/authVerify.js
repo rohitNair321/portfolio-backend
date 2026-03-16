@@ -74,8 +74,41 @@ function allowPublic(req, res, next) {
   }
 }
 
+// middleware/authVerify.js
+
+/**
+ * Hybrid Middleware: Handles both Authenticated and Guest access
+ */
+function optionalAuth(req, res, next) {
+  const auth = req.headers.authorization;
+
+  // 1. If no token, treat as Guest immediately
+  if (!auth || !auth.startsWith('Bearer ')) {
+    req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
+    return next();
+  }
+
+  const token = auth.split(' ')[1];
+
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = {
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role
+    };
+    next();
+  } catch (err) {
+    // 2. If token is invalid/expired, still treat as Guest 
+    // instead of throwing a 401 error.
+    req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
+    next();
+  }
+}
+
 module.exports = {
   verifyToken,
   requireAdmin,
-  allowPublic
+  allowPublic,
+  optionalAuth
 };

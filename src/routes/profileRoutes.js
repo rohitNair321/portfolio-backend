@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const upload = multer(); // memory storage - keeps files in buffer
-const { verifyToken, requireAdmin, allowPublic } = require('../middleware/authVerify');
+const { verifyToken, requireAdmin, allowPublic, optionalAuth } = require('../middleware/authVerify');
 const {
   getMyProfile,
   updateMyProfile,
@@ -19,7 +19,7 @@ const {
  *       200:
  *         description: Profile data retrieved successfully
  */
-router.get('/getMyProfile', allowPublic, getMyProfile);          // GET current user's profile
+router.get('/getMyProfile', optionalAuth, getMyProfile);          // GET current user's profile
 router.put('/saveUpdateMyProfile', verifyToken, requireAdmin, upload.fields([
   { name: 'avatar', maxCount: 1 },
   { name: 'resume', maxCount: 1 }
