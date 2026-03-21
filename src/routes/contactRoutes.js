@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { submitContactForm, getNotifications, markAsRead, deleteContactMessage }  = require('../controllers/contactController');
-const { verifyToken, allowPublic, requireAdmin } = require('../middleware/authVerify');
+const { verifyToken, optionalAuth, requireAdmin } = require('../middleware/authVerify');
 
 /**
  * @swagger
@@ -33,7 +33,7 @@ const { verifyToken, allowPublic, requireAdmin } = require('../middleware/authVe
  *       200:
  *         description: Message submitted successfully
  */
-router.post('/send', allowPublic, submitContactForm);
+router.post('/send', optionalAuth, submitContactForm);
 
 /**
  * @swagger

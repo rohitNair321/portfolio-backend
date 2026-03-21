@@ -1,7 +1,7 @@
 const experess = require("express");
 const router = experess.Router();
 const { chat } = require("../controllers/chatController");
-const { allowPublic, verifyToken } = require("../middleware/authVerify");
+const { optionalAuth, verifyToken } = require("../middleware/authVerify");
 
 const {
   createSession,
@@ -39,7 +39,7 @@ const {
  *         description: AI response
  */
 // router.post('/chat', allowPublic, chat);
-router.post("/chat", allowPublic, chat);
+router.post("/chat", optionalAuth, chat);
 
 
 /**
@@ -49,7 +49,7 @@ router.post("/chat", allowPublic, chat);
  *     summary: Create chat session
  *     tags: [Chat]
  */
-router.post("/createSession",  allowPublic, createSession);
+router.post("/createSession",  optionalAuth, createSession);
 
 /**
  * @swagger
@@ -58,7 +58,7 @@ router.post("/createSession",  allowPublic, createSession);
  *     summary: Save message
  *     tags: [Chat]
  */
-router.post("/message",  allowPublic, saveMessage);
+router.post("/message",  optionalAuth, saveMessage);
 
 /**
  * @swagger
@@ -67,7 +67,7 @@ router.post("/message",  allowPublic, saveMessage);
  *     summary: Get session messages
  *     tags: [Chat]
  */
-router.get("/getSessionById/:id", allowPublic, getSession);
+router.get("/getSessionById/:id", optionalAuth, getSession);
 
 /**
  * @swagger
@@ -76,7 +76,7 @@ router.get("/getSessionById/:id", allowPublic, getSession);
  *     summary: Get all sessions
  *     tags: [Chat]
  */
-router.get("/getSessions", allowPublic, getSessions);
+router.get("/getSessions", optionalAuth, getSessions);
 
 /**
  * @swagger
@@ -85,7 +85,7 @@ router.get("/getSessions", allowPublic, getSessions);
  *     summary: Delete chat session
  *     tags: [Chat]
  */
-router.delete("/deleteSessionById/:id", allowPublic, deleteSession);
+router.delete("/deleteSessionById/:id", optionalAuth, deleteSession);
 
 /**
  * @swagger
@@ -94,6 +94,6 @@ router.delete("/deleteSessionById/:id", allowPublic, deleteSession);
  *     summary: Delete all chat sessions
  *     tags: [Chat]
  */
-router.delete("/deleteAllSessions", allowPublic, deleteAllSessions);
+router.delete("/deleteAllSessions", optionalAuth, deleteAllSessions);
 
 module.exports = router;

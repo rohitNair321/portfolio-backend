@@ -4,21 +4,37 @@ const { supabase } = require('../db/supabaseClient');
 const { askAI } = require("../services/aiService");
 const { checkGuestLimit } = require("../helper/limite");
 const e = require("express");
+const { v4: uuid } = require("uuid");
 const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
 
 async function chat(req, res) {
   try {
 
     const { message, sessionId, userId, role } = req.body;
+
     const ip =
       req.headers["x-forwarded-for"] ||
       req.socket.remoteAddress;
+
+    const guestId = req.cookies?.guestId || ip;
+
+    if (!guestId) {
+
+      guestId = uuid();
+
+      res.cookie("guestId", guestId, {
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 24 * 60 * 60 * 1000
+      });
+
+    }
 
     const isAdmin = role === "ADMIN";
 
     if (!isAdmin) {
 
-      const count = await checkGuestLimit(ip);
+      const count = await checkGuestLimit(guestId);
 
       if (count >= 5) {
 
@@ -67,6 +83,7 @@ async function chat(req, res) {
           is_guest: isAdmin ? false : true,
           user_id: userId,
           user_ip: ip,
+          guest_id: guestId,
           messages: []
         })
         .select()
@@ -211,6 +228,8 @@ async function getSessions(req, res) {
       req.headers["x-forwarded-for"] ||
       req.socket?.remoteAddress ||
       "unknown";
+    
+    const guestId = req.cookies?.guestId || ip;
     let query = supabase
       .from("chat_sessions")
       .select("*")
@@ -222,7 +241,7 @@ async function getSessions(req, res) {
     } else if (role === "guest") {
       query = query
         .eq("is_guest", true)
-        .eq("user_ip", ip)
+        .eq("guest_id", guestId)
         .eq("user_id", userId);
     }
 

@@ -10,6 +10,7 @@ const profileRoutes = require('./routes/profileRoutes');
 const contactRoutes = require('./routes/contactRoutes');
 const chatRoutes = require('./routes/chatRoutes')
 const swaggerUi = require('swagger-ui-express');
+const cookieParser = require("cookie-parser");
 const swaggerJsdoc = require('swagger-jsdoc');
 const path = require('path');
 const { supabase } = require('./db/supabaseClient');
@@ -103,6 +104,7 @@ const corsOptions = {
   credentials: true,
 };
 app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json());
 
 // Health check (optional)

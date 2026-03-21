@@ -6,6 +6,7 @@ const { supabase } = require('../db/supabaseClient');
 const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_EXPIRY = '1d';
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
+const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
 
 /**
  * Create JWT for admin
@@ -20,6 +21,48 @@ function createToken(user) {
     JWT_SECRET,
     { expiresIn: TOKEN_EXPIRY }
   );
+}
+
+async function initAppData(req, res) {
+
+  try {
+    let id = null;
+    let role = "guest";
+    let email = null;
+
+    if (!req.cookies.token) {
+      id = PROFILE_OWNER_ID;
+    } else {
+      id = req.user.id;
+      role = req.user.role;
+      email = req.user.email;
+
+      res.cookie("token", req.cookies.token, {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: false,
+        maxAge: 24 * 60 * 60 * 1000
+      });
+    }
+
+    // Fetch profiles data for the user
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('themes, currenttheme')
+      .eq('id', id)
+      .maybeSingle();
+
+    return res.status(200).json({
+      id: id,
+      role: role,
+      email: email || null,
+      appData: data || null
+    });
+  } catch (err) {
+    console.error('Get me error:', err);
+    return res.status(500).json({ message: 'Unexpected error.' });
+  }
+
 }
 
 /**
@@ -63,14 +106,19 @@ async function loginUser(req, res) {
 
     const token = createToken(user);
 
+    res.cookie("token", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false,
+      maxAge: 24 * 60 * 60 * 1000
+    });
     return res.status(200).json({
       message: 'Admin login successful.',
       user: {
         id: user.id,
         email: user.email,
         role: user.role
-      },
-      token
+      }
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -233,9 +281,41 @@ async function updatePassword(req, res) {
   }
 };
 
+async function logout(req, res) {
+  try {
+
+    res.clearCookie("token", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false
+    });
+
+    res.clearCookie("guestId", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: false
+    });
+
+    return res.status(200).json({
+      message: "Logged out successfully"
+    });
+
+  } catch (err) {
+
+    console.error("Logout error:", err);
+
+    return res.status(500).json({
+      message: "Logout failed"
+    });
+
+  }
+}
+
 module.exports = {
   loginUser,
   forgotPassword,
   resetPassword,
-  updatePassword
+  updatePassword,
+  logout,
+  initAppData
 };

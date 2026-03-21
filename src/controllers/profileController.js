@@ -25,7 +25,7 @@ function parseJsonField(value) {
   }
   return undefined;
 }
-// #endregion
+//#endregion
 
 //#region Helper to upsert profile row upsertProfileRow
 async function upsertProfileRow(userId, payload) {

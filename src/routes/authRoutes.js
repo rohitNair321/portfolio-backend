@@ -1,7 +1,7 @@
 // routes/authRoutes.js
 const express = require('express');
-const { loginUser, forgotPassword, resetPassword, updatePassword } = require('../controllers/authController');
-const { verifyToken, requireAdmin } = require('../middleware/authVerify');
+const { loginUser, forgotPassword, resetPassword, updatePassword, logout, initAppData } = require('../controllers/authController');
+const { verifyToken, requireAdmin, optionalAuth } = require('../middleware/authVerify');
 const router = express.Router();
 
 // /api/auth/register
@@ -37,6 +37,20 @@ const router = express.Router();
  *         description: Login successful
  */
 router.post('/login', loginUser);
+
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     summary: Get current user's profile
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile retrieved successfully
+ */
+router.get("/initApp", optionalAuth, initAppData);
 
 /**
  * @swagger
@@ -110,5 +124,19 @@ router.post('/reset-password', resetPassword);
  *         description: Current password incorrect
  */
 router.put('/update-password', verifyToken, requireAdmin, updatePassword);
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Logout user and invalidate JWT token
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logout successful
+ */
+router.post('/logout', logout);
 
 module.exports = router;

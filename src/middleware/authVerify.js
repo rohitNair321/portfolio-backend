@@ -8,12 +8,26 @@ const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
  */
 function verifyToken(req, res, next) {
   const auth = req.headers.authorization;
+  const cookieToken = req.cookies?.token;
 
-  if (!auth || !auth.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Authorization token required' });
+  let token = null;
+
+  if (auth && auth.startsWith("Bearer ")) {
+    token = auth.split(" ")[1];
+  } else if (cookieToken) {
+    token = cookieToken;
   }
 
-  const token = auth.split(' ')[1];
+  if (!token) {
+    return res.status(401).json({
+      message: "Authorization token required"
+    });
+  }
+  // if (!auth || !auth.startsWith('Bearer ')) {
+  //   return res.status(401).json({ message: 'Authorization token required' });
+  // }
+
+  // token = auth.split(' ')[1];
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
@@ -48,18 +62,28 @@ function requireAdmin(req, res, next) {
  * Public routes (guest)
  */
 function allowPublic(req, res, next) {
-  const auth = req.headers.authorization;
+  let token = null;
+
+  if (req.cookies?.token) {
+    token = req.cookies.token;
+  }
+
+  const authHeader = req.headers.authorization;
+
+  if (!token && authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  }
 
   if (!auth || !auth.startsWith('Bearer ')) {
     req.user = {
-      id: PROFILE_OWNER_ID, 
+      id: PROFILE_OWNER_ID,
       role: 'guest'
     };
     return next();
   }
 
   // 2. If token IS provided, try to verify it
-  const token = auth.split(' ')[1];
+  // const token = auth.split(' ')[1];
   try {
     const payload = jwt.verify(token, JWT_SECRET);
     req.user = {
@@ -79,31 +103,79 @@ function allowPublic(req, res, next) {
 /**
  * Hybrid Middleware: Handles both Authenticated and Guest access
  */
-function optionalAuth(req, res, next) {
-  const auth = req.headers.authorization;
+// function optionalAuth(req, res, next) {
 
-  // 1. If no token, treat as Guest immediately
-  if (!auth || !auth.startsWith('Bearer ')) {
+//   const token = null;
+
+//     // 1. check cookie
+//   if (req.cookies?.token) {
+//     token = req.cookies.token;
+//   }
+
+//   const auth = req.cookies.token;
+//   console.log("Auth header:", req.cookies);
+//   // 1. If no token, treat as Guest immediately
+//   if (!auth) {
+//     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
+//     return next();
+//   }
+
+//   token = auth.split(' ')[1];
+
+//   try {
+//     const payload = jwt.verify(token, JWT_SECRET);
+//     req.user = {
+//       id: payload.sub,
+//       email: payload.email,
+//       role: payload.role
+//     };
+//     next();
+//   } catch (err) {
+//     // 2. If token is invalid/expired, still treat as Guest 
+//     // instead of throwing a 401 error.
+//     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
+//     next();
+//   }
+// }
+function optionalAuth(req, res, next) {
+
+  let token = null;
+
+  if (req.cookies?.token) {
+    token = req.cookies.token;
+  }
+
+  const authHeader = req.headers.authorization;
+
+  if (!token && authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  }
+
+  // 3. no token → guest
+  if (!token) {
     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
     return next();
   }
 
-  const token = auth.split(' ')[1];
-
+  // 4. verify token
   try {
+
     const payload = jwt.verify(token, JWT_SECRET);
+
     req.user = {
       id: payload.sub,
       email: payload.email,
       role: payload.role
     };
-    next();
+
+    return next();
+
   } catch (err) {
-    // 2. If token is invalid/expired, still treat as Guest 
-    // instead of throwing a 401 error.
     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
-    next();
+    return next();
+
   }
+
 }
 
 module.exports = {
