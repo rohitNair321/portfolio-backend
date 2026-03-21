@@ -27,7 +27,7 @@ async function initAppData(req, res) {
 
   try {
     let id = null;
-    let role = "guest";
+    let role = "";
     let email = null;
 
     if (!req.cookies.token) {
