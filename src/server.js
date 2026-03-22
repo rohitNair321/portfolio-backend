@@ -57,6 +57,7 @@ app.use(express.json({ limit: '10kb' })); // Limit body size to prevent DoS
 
 // 3. Sanitize all incoming data to remove script tags
 app.use(xss());
+app.set('trust proxy', 1); 
 
 const PORT = process.env.PORT || 3000;
 

@@ -280,31 +280,26 @@ async function updatePassword(req, res) {
 
 async function logout(req, res) {
   try {
+    // const isProduction = process.env.NODE_ENV === 'production';
 
-    res.clearCookie("token", {
+    const cookieOptions = {
       httpOnly: true,
-      sameSite: "lax",
-      secure: false
-    });
+      sameSite: isProduction ? "none" : "lax",
+      secure: isProduction,
+      path: '/' 
+    };
 
-    res.clearCookie("guestId", {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: false
-    });
+    res.clearCookie("token", cookieOptions);
 
     return res.status(200).json({
       message: "Logged out successfully"
     });
 
   } catch (err) {
-
     console.error("Logout error:", err);
-
     return res.status(500).json({
       message: "Logout failed"
     });
-
   }
 }
 
