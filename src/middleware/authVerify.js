@@ -98,84 +98,49 @@ function allowPublic(req, res, next) {
   }
 }
 
-// middleware/authVerify.js
-
-/**
- * Hybrid Middleware: Handles both Authenticated and Guest access
- */
-// function optionalAuth(req, res, next) {
-
-//   const token = null;
-
-//     // 1. check cookie
-//   if (req.cookies?.token) {
-//     token = req.cookies.token;
-//   }
-
-//   const auth = req.cookies.token;
-//   console.log("Auth header:", req.cookies);
-//   // 1. If no token, treat as Guest immediately
-//   if (!auth) {
-//     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
-//     return next();
-//   }
-
-//   token = auth.split(' ')[1];
-
-//   try {
-//     const payload = jwt.verify(token, JWT_SECRET);
-//     req.user = {
-//       id: payload.sub,
-//       email: payload.email,
-//       role: payload.role
-//     };
-//     next();
-//   } catch (err) {
-//     // 2. If token is invalid/expired, still treat as Guest 
-//     // instead of throwing a 401 error.
-//     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
-//     next();
-//   }
-// }
 function optionalAuth(req, res, next) {
-
   let token = null;
+  let tokenSource = null;
 
+  // 1. Check if token exists in Cookies
   if (req.cookies?.token) {
     token = req.cookies.token;
+    tokenSource = 'Cookie';
   }
 
+  // 2. If not in cookies, check the Authorization Header
   const authHeader = req.headers.authorization;
-
-  if (!token && authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.split(" ")[1];
+  if (!token && authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+    tokenSource = 'Auth-Header';
   }
 
-  // 3. no token → guest
+  // 3. 🚨 No token found at all -> Assign Guest
   if (!token) {
+    console.log(`[🔍 optionalAuth] No token found. Downgrading to GUEST. Path: ${req.originalUrl}`);
     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
     return next();
   }
 
-  // 4. verify token
+  // 4. Token found -> Let's verify it
   try {
-
     const payload = jwt.verify(token, JWT_SECRET);
 
     req.user = {
       id: payload.sub,
       email: payload.email,
-      role: payload.role
+      role: payload.role || 'guest'
     };
 
+    console.log(`[✅ optionalAuth] Authenticated as ${req.user.role} via ${tokenSource}. Email: ${req.user.email}`);
     return next();
 
   } catch (err) {
+    // 5. Expired or Invalid token -> Fallback to Guest
+    console.warn(`[⚠️ optionalAuth] Token verification failed via ${tokenSource}. Falling back to GUEST. Reason: ${err.message}`);
     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
     return next();
-
   }
-
 }
 
 module.exports = {

@@ -27,7 +27,6 @@ function createToken(user) {
 async function initAppData(req, res) {
   try {
     // 1. Identify the user from req.user (populated by optionalAuth)
-
     const user = req.user;
     const id = user?.id || PROFILE_OWNER_ID;
     const role = user?.role || "guest";
@@ -107,7 +106,8 @@ async function loginUser(req, res) {
       httpOnly: true,
       sameSite: isProduction ? "none" : "lax",
       secure: isProduction,
-      maxAge: 24 * 60 * 60 * 1000
+      maxAge: 24 * 60 * 60 * 1000,
+      path: '/'
     });
     return res.status(200).json({
       message: 'Admin login successful.',
@@ -115,7 +115,8 @@ async function loginUser(req, res) {
         id: user.id,
         email: user.email,
         role: user.role
-      }
+      },
+      token: token
     });
   } catch (err) {
     console.error('Login error:', err);
