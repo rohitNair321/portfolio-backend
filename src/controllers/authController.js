@@ -27,6 +27,7 @@ function createToken(user) {
 async function initAppData(req, res) {
   try {
     // 1. Identify the user from req.user (populated by optionalAuth)
+
     const user = req.user;
     const id = user?.id || PROFILE_OWNER_ID;
     const role = user?.role || "guest";
@@ -36,8 +37,8 @@ async function initAppData(req, res) {
     if (user && user.role !== 'guest' && req.cookies.token) {
       res.cookie("token", req.cookies.token, {
         httpOnly: true,
-        sameSite: process.env.NODE_ENV === 'production' ? "lax" : "lax",
-        secure: process.env.NODE_ENV === 'production',
+        sameSite: isProduction ? "none" : "lax",
+        secure: isProduction,
         maxAge: 24 * 60 * 60 * 1000
       });
     }
@@ -104,7 +105,7 @@ async function loginUser(req, res) {
 
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: isProduction ? "lax" : "lax",
+      sameSite: isProduction ? "none" : "lax",
       secure: isProduction,
       maxAge: 24 * 60 * 60 * 1000
     });
