@@ -86,7 +86,8 @@ const allowedOrigins = [
   'http://localhost:3000',
   'https://rohitnair321.github.io',
   'https://rohit-nair296.onrender.com',
-  'https://portfolio-backend-bpmw.onrender.com'
+  'https://portfolio-backend-bpmw.onrender.com',
+  'https://www.mintpixel.in'
 ];
 const corsOptions = {
   origin: function (origin, callback) {

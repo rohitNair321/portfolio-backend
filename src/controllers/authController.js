@@ -7,6 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_EXPIRY = '1d';
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
+const isProduction = process.env.NODE_ENV === 'production';
 
 /**
  * Create JWT for admin
@@ -24,28 +25,24 @@ function createToken(user) {
 }
 
 async function initAppData(req, res) {
-
   try {
-    let id = null;
-    let role = "";
-    let email = null;
+    // 1. Identify the user from req.user (populated by optionalAuth)
+    const user = req.user;
+    const id = user?.id || PROFILE_OWNER_ID;
+    const role = user?.role || "guest";
+    const email = user?.email || null;
 
-    if (!req.cookies.token) {
-      id = PROFILE_OWNER_ID;
-    } else {
-      id = req.user.id;
-      role = req.user.role;
-      email = req.user.email;
-
+    // 2. Refresh the cookie ONLY if we are authenticated and a cookie was sent
+    if (user && user.role !== 'guest' && req.cookies.token) {
       res.cookie("token", req.cookies.token, {
         httpOnly: true,
-        sameSite: "lax",
-        secure: false,
+        sameSite: process.env.NODE_ENV === 'production' ? "lax" : "lax",
+        secure: process.env.NODE_ENV === 'production',
         maxAge: 24 * 60 * 60 * 1000
       });
     }
 
-    // Fetch profiles data for the user
+    // 3. Database fetch...
     const { data, error } = await supabase
       .from('profiles')
       .select('themes, currenttheme')
@@ -53,16 +50,15 @@ async function initAppData(req, res) {
       .maybeSingle();
 
     return res.status(200).json({
-      id: id,
-      role: role,
-      email: email || null,
+      id,
+      role,
+      email,
       appData: data || null
     });
   } catch (err) {
-    console.error('Get me error:', err);
+    console.error('initAppData error:', err);
     return res.status(500).json({ message: 'Unexpected error.' });
   }
-
 }
 
 /**
@@ -108,8 +104,8 @@ async function loginUser(req, res) {
 
     res.cookie("token", token, {
       httpOnly: true,
-      sameSite: "lax",
-      secure: false,
+      sameSite: isProduction ? "lax" : "lax",
+      secure: isProduction,
       maxAge: 24 * 60 * 60 * 1000
     });
     return res.status(200).json({
