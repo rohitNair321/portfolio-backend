@@ -4,44 +4,22 @@ const JWT_SECRET = process.env.JWT_SECRET;
 const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
 
 /**
- * Verify JWT and attach user
+ * STRICT Verification (Admin Routes)
  */
 function verifyToken(req, res, next) {
-  const auth = req.headers.authorization;
-  const cookieToken = req.cookies?.token;
+  let token = req.cookies?.token;
 
-  let token = null;
-
-  if (auth && auth.startsWith("Bearer ")) {
-    token = auth.split(" ")[1];
-  } else if (cookieToken) {
-    token = cookieToken;
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
   if (!token) {
-    return res.status(401).json({
-      message: "Authorization token required"
-    });
+    return res.status(401).json({ message: "Authorization token required" });
   }
-  // if (!auth || !auth.startsWith('Bearer ')) {
-  //   return res.status(401).json({ message: 'Authorization token required' });
-  // }
-
-  // token = auth.split(' ')[1];
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-
-    if (!payload.role) {
-      return res.status(401).json({ message: 'Invalid token payload' });
-    }
-
-    req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role
-    };
-
+    req.user = { id: payload.sub, email: payload.email, role: payload.role };
     next();
   } catch {
     return res.status(401).json({ message: 'Invalid or expired token' });
@@ -59,85 +37,25 @@ function requireAdmin(req, res, next) {
 }
 
 /**
- * Public routes (guest)
+ * OPTIONAL Verification (Public + Authed user endpoints)
  */
-function allowPublic(req, res, next) {
-  let token = null;
-
-  if (req.cookies?.token) {
-    token = req.cookies.token;
-  }
-
-  const authHeader = req.headers.authorization;
-
-  if (!token && authHeader && authHeader.startsWith("Bearer ")) {
-    token = authHeader.split(" ")[1];
-  }
-
-  if (!auth || !auth.startsWith('Bearer ')) {
-    req.user = {
-      id: PROFILE_OWNER_ID,
-      role: 'guest'
-    };
-    return next();
-  }
-
-  // 2. If token IS provided, try to verify it
-  // const token = auth.split(' ')[1];
-  try {
-    const payload = jwt.verify(token, JWT_SECRET);
-    req.user = {
-      id: payload.sub,
-      role: payload.role
-    };
-    next();
-  } catch (err) {
-    // If token is expired/invalid, we still allow them as a guest
-    req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
-    next();
-  }
-}
-
 function optionalAuth(req, res, next) {
-  let token = null;
-  let tokenSource = null;
+  let token = req.cookies?.token;
 
-  // 1. Check if token exists in Cookies
-  if (req.cookies?.token) {
-    token = req.cookies.token;
-    tokenSource = 'Cookie';
+  if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1];
   }
 
-  // 2. If not in cookies, check the Authorization Header
-  const authHeader = req.headers.authorization;
-  if (!token && authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.split(' ')[1];
-    tokenSource = 'Auth-Header';
-  }
-
-  // 3. 🚨 No token found at all -> Assign Guest
   if (!token) {
-    console.log(`[🔍 optionalAuth] No token found. Downgrading to GUEST. Path: ${req.originalUrl}`);
     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
     return next();
   }
 
-  // 4. Token found -> Let's verify it
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-
-    req.user = {
-      id: payload.sub,
-      email: payload.email,
-      role: payload.role || 'guest'
-    };
-
-    console.log(`[✅ optionalAuth] Authenticated as ${req.user.role} via ${tokenSource}. Email: ${req.user.email}`);
+    req.user = { id: payload.sub, email: payload.email, role: payload.role || 'guest' };
     return next();
-
-  } catch (err) {
-    // 5. Expired or Invalid token -> Fallback to Guest
-    console.warn(`[⚠️ optionalAuth] Token verification failed via ${tokenSource}. Falling back to GUEST. Reason: ${err.message}`);
+  } catch {
     req.user = { id: PROFILE_OWNER_ID, role: 'guest' };
     return next();
   }
@@ -146,6 +64,5 @@ function optionalAuth(req, res, next) {
 module.exports = {
   verifyToken,
   requireAdmin,
-  allowPublic,
   optionalAuth
 };

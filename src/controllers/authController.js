@@ -26,35 +26,32 @@ function createToken(user) {
 
 async function initAppData(req, res) {
   try {
-    // 1. Identify the user from req.user (populated by optionalAuth)
     const user = req.user;
     const id = user?.id || PROFILE_OWNER_ID;
     const role = user?.role || "guest";
     const email = user?.email || null;
 
-    // 2. Refresh the cookie ONLY if we are authenticated and a cookie was sent
-    if (user && user.role !== 'guest' && req.cookies.token) {
-      res.cookie("token", req.cookies.token, {
-        httpOnly: true,
-        sameSite: isProduction ? "none" : "lax",
-        secure: isProduction,
-        maxAge: 24 * 60 * 60 * 1000
-      });
+    // Refresh cookie for active sessions
+    if (user && user.role !== 'guest') {
+      const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
+      if (token) {
+        res.cookie("token", token, {
+          httpOnly: true,
+          sameSite: isProduction ? "none" : "lax",
+          secure: isProduction,
+          maxAge: 24 * 60 * 60 * 1000,
+          path: '/'
+        });
+      }
     }
 
-    // 3. Database fetch...
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('themes, currenttheme')
       .eq('id', id)
       .maybeSingle();
 
-    return res.status(200).json({
-      id,
-      role,
-      email,
-      appData: data || null
-    });
+    return res.status(200).json({ id, role, email, appData: data || null });
   } catch (err) {
     console.error('initAppData error:', err);
     return res.status(500).json({ message: 'Unexpected error.' });
@@ -281,26 +278,17 @@ async function updatePassword(req, res) {
 
 async function logout(req, res) {
   try {
-    // const isProduction = process.env.NODE_ENV === 'production';
-
-    const cookieOptions = {
+    res.clearCookie("token", {
       httpOnly: true,
       sameSite: isProduction ? "none" : "lax",
       secure: isProduction,
       path: '/' 
-    };
-
-    res.clearCookie("token", cookieOptions);
-
-    return res.status(200).json({
-      message: "Logged out successfully"
     });
 
+    return res.status(200).json({ message: "Logged out successfully" });
   } catch (err) {
     console.error("Logout error:", err);
-    return res.status(500).json({
-      message: "Logout failed"
-    });
+    return res.status(500).json({ message: "Logout failed" });
   }
 }
 
