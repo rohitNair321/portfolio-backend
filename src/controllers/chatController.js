@@ -48,7 +48,7 @@ async function chat(req, res) {
 
     }
 
-    const reply = await askAI(message);
+    const reply = await askAI(message, role);
 
     let session = null;
 
