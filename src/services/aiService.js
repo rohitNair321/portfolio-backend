@@ -58,8 +58,8 @@ function buildSystemPrompt(profile, role) {
   const experienceSections = (profile.experiences ?? [])
     .map(exp => {
       const period = exp.present
-        ? `${exp.startDate} – Present`
-        : `${exp.startDate} – ${exp.endDate}`;
+        ? `${exp.startDate} Present`
+        : `${exp.startDate} ${exp.endDate}`;
 
       const projects = (exp.projects ?? [])
         .map(p =>
@@ -90,6 +90,10 @@ You are a sophisticated, professional, and tech-savvy assistant representing a h
 Help recruiters, clients, and collaborators explore ${profile.full_name}'s technical expertise, project history, and professional value — and guide them toward making contact or initiating a collaboration.
  
 ---
+
+## Role greetings
+- If role is admin ${role} then greet with: "Welcome back, ${profile.full_name}! How can I assist you with your profile today?"
+- If role is guest ${role} then greet with: "Hello! I'm FolioAI, ${profile.full_name}'s personal AI assistant. Ask me anything about his work, skills, or projects."
  
 ## Candidate Profile
 - **Full Name:** ${profile.full_name}
