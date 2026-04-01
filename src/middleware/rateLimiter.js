@@ -10,19 +10,45 @@ const logger = require('../config/logger');
 const apiLimiter = rateLimit({
   windowMs: RATE_LIMIT.API_WINDOW_MINUTES * 60 * 1000,
   max: RATE_LIMIT.API_MAX_REQUESTS,
+
+  skip: (req) => {
+    const allowedHosts = [
+      'rohit-nair296.onrender.com',
+      'localhost'
+    ];
+
+    const host = req.headers.host;
+    const userAgent = req.headers['user-agent'] || '';
+
+    // ✅ Skip SSR requests (Node/Angular SSR)
+    if (userAgent.includes('node')) {
+      return true;
+    }
+
+    // ✅ Skip your own frontend (Render domain)
+    if (allowedHosts.includes(host)) {
+      return true;
+    }
+
+    return false;
+  },
+
   message: {
     success: false,
     statusCode: 429,
     message: `Too many requests from this IP, please try again after ${RATE_LIMIT.API_WINDOW_MINUTES} minutes`,
     timestamp: new Date().toISOString(),
   },
+
   standardHeaders: true,
   legacyHeaders: false,
+
   handler: (req, res) => {
     logger.warn('Rate limit exceeded', {
       ip: req.ip,
       url: req.url,
     });
+
     res.status(429).json({
       success: false,
       statusCode: 429,
