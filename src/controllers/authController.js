@@ -45,11 +45,11 @@ async function initAppData(req, res) {
       }
     }
 
-    // const { data } = await supabase
-    //   .from('profiles')
-    //   .select('themes, currenttheme')
-    //   .eq('id', id)
-    //   .maybeSingle();
+    const { data } = await supabase
+      .from('profiles')
+      .select('themes, currenttheme')
+      .eq('id', id)
+      .maybeSingle();
 
     return res.status(200).json({ id, role, email});
   } catch (err) {
