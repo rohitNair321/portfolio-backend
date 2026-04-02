@@ -9,7 +9,8 @@ const {
   getSession,
   getSessions,
   deleteSession,
-  deleteAllSessions
+  deleteAllSessions,
+  aiUsage
 } = require("../controllers/chatController");
 
 /**
@@ -59,6 +60,15 @@ router.post("/createSession",  optionalAuth, createSession);
  *     tags: [Chat]
  */
 router.post("/message",  optionalAuth, saveMessage);
+
+/**
+ * @swagger
+ * /api/chat/ai-usage:
+ *   get:
+ *     summary: Get AI usage statistics
+ *     tags: [Chat]
+ */
+router.get("/usage", optionalAuth, aiUsage);
 
 /**
  * @swagger

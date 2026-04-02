@@ -31,6 +31,7 @@ async function chat(req, res) {
     }
 
     const isAdmin = role === "ADMIN";
+    const isGuest = isAdmin ? false : true;
 
     if (!isAdmin) {
 
@@ -48,7 +49,7 @@ async function chat(req, res) {
 
     }
 
-    const reply = await askAI(message, role);
+    const reply = await askAI(message, role, guestId, sessionId, userId, isGuest);
 
     let session = null;
 
@@ -192,6 +193,67 @@ async function saveMessage(req, res) {
   }
 }
 
+async function aiUsage(req, res) {
+  try {
+    const { userId, sessionId, range = '7d' } = req.query;
+
+    let query = supabase.from('ai_usage').select('*');
+
+    // Filters
+    if (userId) query = query.eq('user_id', userId);
+    if (sessionId) query = query.eq('session_id', sessionId);
+
+    // Date filter (last 7 days / 30 days etc.)
+    const days = parseInt(range.replace('d', '')) || 7;
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - days);
+
+    query = query.gte('created_at', fromDate.toISOString());
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    // ── Aggregation ───────────────────────────────
+
+    const summary = data.reduce(
+      (acc, item) => {
+        acc.totalTokens += item.total_tokens || 0;
+        acc.inputTokens += item.input_tokens || 0;
+        acc.outputTokens += item.output_tokens || 0;
+        return acc;
+      },
+      { totalTokens: 0, inputTokens: 0, outputTokens: 0 }
+    );
+
+    // ── Trend (group by date) ─────────────────────
+
+    const trendMap = {};
+
+    data.forEach(item => {
+      const date = new Date(item.created_at).toISOString().split('T')[0];
+
+      if (!trendMap[date]) {
+        trendMap[date] = 0;
+      }
+
+      trendMap[date] += item.total_tokens || 0;
+    });
+
+    const trend = Object.entries(trendMap).map(([date, tokens]) => ({
+      date,
+      tokens,
+    }));
+
+    res.json({ summary, trend });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch usage' });
+  }
+}
+
+
 async function getSession(req, res) {
   try {
 
@@ -292,4 +354,4 @@ async function deleteAllSessions(req, res) {
   res.json({ success: true });
 }
 
-module.exports = { chat, createSession, saveMessage, getSession, getSessions, deleteSession, deleteAllSessions };
+module.exports = { chat, createSession, saveMessage, getSession, getSessions, deleteSession, deleteAllSessions, aiUsage };

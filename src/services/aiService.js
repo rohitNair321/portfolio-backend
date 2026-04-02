@@ -17,7 +17,7 @@ async function getProfile() {
   return data;
 }
 
-async function askAI(message, role) {
+async function askAI(message, role, guestId, sessionId, userId, isGuest) {
   const profile = await getProfile();
   const systemPrompt = await buildSystemPrompt(profile, role);
   const response = await client.responses.create({
@@ -32,6 +32,22 @@ async function askAI(message, role) {
         content: message,
       },
     ],
+  });
+
+  await supabase.from("ai_usage").insert({
+    session_id: sessionId,
+    user_id: userId,
+    role: role,
+    is_guest: isGuest,
+    guest_id: guestId,
+
+    model: response.model,
+
+    input_tokens: response.usage?.input_tokens,
+    output_tokens: response.usage?.output_tokens,
+    total_tokens: response.usage?.total_tokens,
+
+    request_id: response.id
   });
 
   return response.output_text;
