@@ -7,6 +7,16 @@ const e = require("express");
 const { v4: uuid } = require("uuid");
 const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
 
+const PRICING = {
+  'o4-mini':          { input: 0.003,  output: 0.012  },
+  'gpt-4o':           { input: 0.005,  output: 0.015  },
+  'gpt-4o-mini':      { input: 0.00015,output: 0.0006 },
+  'gpt-4-turbo':      { input: 0.01,   output: 0.03   },
+  'gpt-3.5-turbo':    { input: 0.0005, output: 0.0015 },
+};
+ 
+const DEFAULT_PRICING = { input: 0.003, output: 0.012 };
+
 async function chat(req, res) {
   try {
 
@@ -195,62 +205,237 @@ async function saveMessage(req, res) {
 
 async function aiUsage(req, res) {
   try {
-    const { userId, sessionId, range = '7d' } = req.query;
+    const range = req.query.range || '7d';
+    const startDate = getStartDate(range);
 
-    let query = supabase.from('ai_usage').select('*');
+    // ── 1. Pull raw rows from Supabase ────────────────────────
+    let query = supabase
+      .from('ai_usage')
+      .select('created_at, model, input_tokens, output_tokens, total_tokens, session_id, role, is_guest')
+      .order('created_at', { ascending: true });
 
-    // Filters
-    if (userId) query = query.eq('user_id', userId);
-    if (sessionId) query = query.eq('session_id', sessionId);
+    if (startDate) {
+      query = query.gte('created_at', startDate);
+    }
 
-    // Date filter (last 7 days / 30 days etc.)
-    const days = parseInt(range.replace('d', '')) || 7;
-    const fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - days);
+    const { data: rows, error } = await query;
 
-    query = query.gte('created_at', fromDate.toISOString());
+    if (error) {
+      console.error('Supabase error:', error);
+      return res.status(500).json({ error: 'Failed to fetch usage data' });
+    }
 
-    const { data, error } = await query;
+    if (!rows || rows.length === 0) {
+      return res.json({
+        summary: { totalTokens: 0, inputTokens: 0, outputTokens: 0, totalCost: 0 },
+        trend: [],
+        byModel: [],
+        byRole: { admin: zeroBlock(), guest: zeroBlock() },
+        sessions: [],
+        allTime: zeroBlock(),
+      });
+    }
 
-    if (error) throw error;
+    // ── 2. Aggregate summary ──────────────────────────────────
+    let totalInput = 0, totalOutput = 0, totalAll = 0, totalCost = 0;
 
-    // ── Aggregation ───────────────────────────────
-
-    const summary = data.reduce(
-      (acc, item) => {
-        acc.totalTokens += item.total_tokens || 0;
-        acc.inputTokens += item.input_tokens || 0;
-        acc.outputTokens += item.output_tokens || 0;
-        return acc;
-      },
-      { totalTokens: 0, inputTokens: 0, outputTokens: 0 }
-    );
-
-    // ── Trend (group by date) ─────────────────────
-
-    const trendMap = {};
-
-    data.forEach(item => {
-      const date = new Date(item.created_at).toISOString().split('T')[0];
-
-      if (!trendMap[date]) {
-        trendMap[date] = 0;
-      }
-
-      trendMap[date] += item.total_tokens || 0;
+    rows.forEach(r => {
+      totalInput += r.input_tokens ?? 0;
+      totalOutput += r.output_tokens ?? 0;
+      totalAll += r.total_tokens ?? 0;
+      totalCost += calcCost(r.input_tokens, r.output_tokens, r.model);
     });
 
-    const trend = Object.entries(trendMap).map(([date, tokens]) => ({
-      date,
-      tokens,
+    const summary = {
+      totalTokens: totalAll,
+      inputTokens: totalInput,
+      outputTokens: totalOutput,
+      totalCost: parseFloat(totalCost.toFixed(6)),
+    };
+
+    // ── 3. Trend — group by calendar date ────────────────────
+    const dateMap = {};
+    rows.forEach(r => {
+      const day = r.created_at.slice(0, 10);   // 'YYYY-MM-DD'
+      if (!dateMap[day]) {
+        dateMap[day] = { date: day, tokens: 0, inputTokens: 0, outputTokens: 0, cost: 0, requests: 0 };
+      }
+      dateMap[day].tokens += r.total_tokens ?? 0;
+      dateMap[day].inputTokens += r.input_tokens ?? 0;
+      dateMap[day].outputTokens += r.output_tokens ?? 0;
+      dateMap[day].cost += calcCost(r.input_tokens, r.output_tokens, r.model);
+      dateMap[day].requests += 1;
+    });
+
+    const trend = Object.values(dateMap).map(d => ({
+      ...d,
+      cost: parseFloat(d.cost.toFixed(6)),
     }));
 
-    res.json({ summary, trend });
+    // ── 4. By model breakdown ─────────────────────────────────
+    const modelMap = {};
+    rows.forEach(r => {
+      const m = r.model ?? 'unknown';
+      if (!modelMap[m]) {
+        modelMap[m] = { model: m, totalTokens: 0, inputTokens: 0, outputTokens: 0, cost: 0, requests: 0 };
+      }
+      modelMap[m].totalTokens += r.total_tokens ?? 0;
+      modelMap[m].inputTokens += r.input_tokens ?? 0;
+      modelMap[m].outputTokens += r.output_tokens ?? 0;
+      modelMap[m].cost += calcCost(r.input_tokens, r.output_tokens, r.model);
+      modelMap[m].requests += 1;
+    });
+
+    const byModel = Object.values(modelMap)
+      .map(m => ({ ...m, cost: parseFloat(m.cost.toFixed(6)) }))
+      .sort((a, b) => b.totalTokens - a.totalTokens);
+
+    // ── 5. By role (admin vs guest) ───────────────────────────
+    const byRole = { admin: zeroBlock(), guest: zeroBlock() };
+    rows.forEach(r => {
+      const key = r.is_guest ? 'guest' : 'admin';
+      byRole[key].totalTokens += r.total_tokens ?? 0;
+      byRole[key].inputTokens += r.input_tokens ?? 0;
+      byRole[key].outputTokens += r.output_tokens ?? 0;
+      byRole[key].cost += calcCost(r.input_tokens, r.output_tokens, r.model);
+      byRole[key].requests += 1;
+    });
+    byRole.admin.cost = parseFloat(byRole.admin.cost.toFixed(6));
+    byRole.guest.cost = parseFloat(byRole.guest.cost.toFixed(6));
+
+    // ── 6. Per-session summary (top 20 most expensive) ────────
+    const sessionMap = {};
+    rows.forEach(r => {
+      const sid = r.session_id ?? 'no-session';
+      if (!sessionMap[sid]) {
+        sessionMap[sid] = {
+          sessionId: sid,
+          date: r.created_at.slice(0, 10),
+          totalTokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cost: 0,
+          requests: 0,
+          model: r.model,
+        };
+      }
+      sessionMap[sid].totalTokens += r.total_tokens ?? 0;
+      sessionMap[sid].inputTokens += r.input_tokens ?? 0;
+      sessionMap[sid].outputTokens += r.output_tokens ?? 0;
+      sessionMap[sid].cost += calcCost(r.input_tokens, r.output_tokens, r.model);
+      sessionMap[sid].requests += 1;
+    });
+
+    const sessions = Object.values(sessionMap)
+      .map(s => ({ ...s, cost: parseFloat(s.cost.toFixed(6)) }))
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 20);
+
+    // ── 7. All-time totals (always full table, ignores range) ─
+    const { data: allRows } = await supabase
+      .from('ai_usage')
+      .select('input_tokens, output_tokens, total_tokens, model');
+
+    let atInput = 0, atOutput = 0, atAll = 0, atCost = 0, atReqs = 0;
+    (allRows ?? []).forEach(r => {
+      atInput += r.input_tokens ?? 0;
+      atOutput += r.output_tokens ?? 0;
+      atAll += r.total_tokens ?? 0;
+      atCost += calcCost(r.input_tokens, r.output_tokens, r.model);
+      atReqs += 1;
+    });
+
+    const allTime = {
+      totalTokens: atAll,
+      inputTokens: atInput,
+      outputTokens: atOutput,
+      totalRequests: atReqs,
+      totalCost: parseFloat(atCost.toFixed(6)),
+    };
+
+    return res.json({ summary, trend, byModel, byRole, sessions, allTime });
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to fetch usage' });
+    console.error('Usage route error:', err);
+    return res.status(500).json({ error: 'Internal server error' });
   }
+}
+
+async function balance(req, res) {
+  try {
+    // OpenAI exposes subscription/credit info at this endpoint.
+    // Requires the same API key with org-level read permissions.
+    const response = await fetch(
+      'https://api.openai.com/v1/organization/usage/costs',
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      // Fallback: calculate total cost from our own Supabase data
+      // so the frontend always gets something useful.
+      const { data: allRows } = await supabase
+        .from('ai_usage')
+        .select('input_tokens, output_tokens, model');
+
+      let totalSpent = 0;
+      (allRows ?? []).forEach(r => {
+        totalSpent += calcCost(r.input_tokens, r.output_tokens, r.model);
+      });
+
+      return res.json({
+        source: 'supabase',   // tells frontend the data is estimated
+        totalUsedUSD: parseFloat(totalSpent.toFixed(6)),
+        hardLimitUSD: null,
+        remainingUSD: null,
+        remainingPct: null,
+      });
+    }
+
+    const data = await response.json();
+
+    // OpenAI cost API response shape (as of 2025):
+    // { object: 'list', data: [{ amount: { value, currency }, ... }] }
+    const totalUsed = (data.data ?? []).reduce(
+      (sum, item) => sum + (item.amount?.value ?? 0), 0
+    );
+
+    return res.json({
+      source: 'openai',
+      totalUsedUSD: parseFloat(totalUsed.toFixed(6)),
+      hardLimitUSD: null,    // OpenAI removed hard limits in 2024; use spend limits instead
+      remainingUSD: null,
+      remainingPct: null,
+    });
+
+  } catch (err) {
+    console.error('Balance route error:', err);
+    return res.status(500).json({ error: 'Failed to fetch balance' });
+  }
+}
+
+// ── Zero block helper ─────────────────────────────────────────
+function zeroBlock() {
+  return { totalTokens: 0, inputTokens: 0, outputTokens: 0, cost: 0, requests: 0 };
+}
+
+function calcCost(inputTokens = 0, outputTokens = 0, model = 'o4-mini') {
+  const rate = PRICING[model] ?? DEFAULT_PRICING;
+  return (inputTokens / 1000) * rate.input
+    + (outputTokens / 1000) * rate.output;
+}
+
+// ── Helper: date range filter ─────────────────────────────────
+function getStartDate(range) {
+  if (range === 'all') { return null; }
+  const days = range === '90d' ? 90 : range === '30d' ? 30 : 7;
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return d.toISOString();
 }
 
 
@@ -290,7 +475,7 @@ async function getSessions(req, res) {
       req.headers["x-forwarded-for"] ||
       req.socket?.remoteAddress ||
       "unknown";
-    
+
     const guestId = req.cookies?.guestId || ip;
     let query = supabase
       .from("chat_sessions")
@@ -354,4 +539,4 @@ async function deleteAllSessions(req, res) {
   res.json({ success: true });
 }
 
-module.exports = { chat, createSession, saveMessage, getSession, getSessions, deleteSession, deleteAllSessions, aiUsage };
+module.exports = { chat, createSession, saveMessage, getSession, getSessions, deleteSession, deleteAllSessions, aiUsage, balance };

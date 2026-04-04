@@ -10,7 +10,8 @@ const {
   getSessions,
   deleteSession,
   deleteAllSessions,
-  aiUsage
+  aiUsage,
+  balance
 } = require("../controllers/chatController");
 
 /**
@@ -69,6 +70,15 @@ router.post("/message",  optionalAuth, saveMessage);
  *     tags: [Chat]
  */
 router.get("/usage", optionalAuth, aiUsage);
+
+/**
+ * @swagger
+ * /api/chat/balance:
+ *   get:
+ *     summary: Get balance
+ *     tags: [Chat]
+ */
+router.get("/balance", optionalAuth, balance);
 
 /**
  * @swagger
