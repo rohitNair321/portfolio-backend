@@ -28,6 +28,11 @@ module.exports = {
     RESET_TOKEN_EXPIRY: '1h',
   },
 
+  PASSWORD_RESET: {
+    OTP_LENGTH: 6,
+    OTP_EXPIRY_MINUTES: 10,
+  },
+
   // User Roles
   USER_ROLES: {
     ADMIN: 'admin',

@@ -56,7 +56,7 @@ router.get("/initApp", optionalAuth, initAppData);
  * @swagger
  * /api/auth/forgot-password:
  *   post:
- *     summary: Send password reset link
+ *     summary: Generate password reset OTP
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -67,32 +67,46 @@ router.get("/initApp", optionalAuth, initAppData);
  *             properties:
  *               email:
  *                 type: string
+ *                 format: email
+ *                 example: admin@example.com
  *     responses:
  *       200:
- *         description: Reset email sent
+ *         description: Reset OTP generated and logged to the server console if the email exists
  */
 router.post('/forgot-password', forgotPassword);
 
 /**
  * @swagger
  * /api/auth/reset-password:
- * post:
- * summary: Reset user password
- * tags: [Auth]
- * requestBody:
- *   required: true
- *   content:
- *     application/json:
- *       schema:
- *         type: object
- *         properties:
- *           token:
- *             type: string
- *           newPassword:
- *             type: string
- * responses:
- *   200:
- *     description: Password reset successful
+ *   post:
+ *     summary: Reset user password with OTP
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - otp
+ *               - newPassword
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: admin@example.com
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *               newPassword:
+ *                 type: string
+ *                 example: NewSecurePass123
+ *     responses:
+ *       200:
+ *         description: Password reset successful
+ *       400:
+ *         description: OTP expired or invalid
  */
 router.post('/reset-password', resetPassword);
 

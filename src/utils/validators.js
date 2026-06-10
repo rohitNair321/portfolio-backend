@@ -27,12 +27,17 @@ const authValidators = {
   }),
 
   resetPassword: Joi.object({
-    token: Joi.string().required().messages({
-      'any.required': 'Reset token is required',
+    email: Joi.string().email().required().messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required',
     }),
-    password: Joi.string().min(VALIDATION.PASSWORD_MIN_LENGTH).required().messages({
-      'string.min': `Password must be at least ${VALIDATION.PASSWORD_MIN_LENGTH} characters`,
-      'any.required': 'Password is required',
+    otp: Joi.string().pattern(/^\d{6}$/).required().messages({
+      'string.pattern.base': 'OTP must be a 6-digit number',
+      'any.required': 'OTP is required',
+    }),
+    newPassword: Joi.string().min(VALIDATION.PASSWORD_MIN_LENGTH).required().messages({
+      'string.min': `New password must be at least ${VALIDATION.PASSWORD_MIN_LENGTH} characters`,
+      'any.required': 'New password is required',
     }),
   }),
 

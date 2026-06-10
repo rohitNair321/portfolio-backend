@@ -77,7 +77,7 @@ router.post('/logout', verifyToken, authController.logout);
  * @swagger
  * /api/v1/auth/forgot-password:
  *   post:
- *     summary: Request password reset
+ *     summary: Generate password reset OTP
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -91,9 +91,10 @@ router.post('/logout', verifyToken, authController.logout);
  *               email:
  *                 type: string
  *                 format: email
+ *                 example: admin@example.com
  *     responses:
  *       200:
- *         description: Reset email sent (if email exists)
+ *         description: Reset OTP generated and logged to the server console if the email exists
  */
 router.post(
   '/forgot-password',
@@ -106,7 +107,7 @@ router.post(
  * @swagger
  * /api/v1/auth/reset-password:
  *   post:
- *     summary: Reset password with token
+ *     summary: Reset password with OTP
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -115,17 +116,28 @@ router.post(
  *           schema:
  *             type: object
  *             required:
- *               - token
- *               - password
+ *               - email
+ *               - otp
+ *               - newPassword
  *             properties:
- *               token:
+ *               email:
  *                 type: string
- *               password:
+ *                 format: email
+ *                 example: admin@example.com
+ *               otp:
+ *                 type: string
+ *                 example: "123456"
+ *               newPassword:
  *                 type: string
  *                 format: password
+ *                 example: NewSecurePass123
  *     responses:
  *       200:
  *         description: Password reset successful
+ *       400:
+ *         description: OTP expired or invalid
+ *       422:
+ *         description: Validation error
  */
 router.post(
   '/reset-password',

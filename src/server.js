@@ -1,5 +1,26 @@
 // server.js - Enhanced with comprehensive architecture
 require('dotenv').config();
+
+// ============================================
+// STARTUP ENV VALIDATION
+// ============================================
+const REQUIRED_ENV = [
+  'SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'JWT_SECRET',
+  'PROFILE_OWNER_ID',
+  'OPENAI_API_KEY',
+];
+const missingEnv = REQUIRED_ENV.filter(k => !process.env[k]);
+if (missingEnv.length > 0) {
+  console.error(`❌ Missing required environment variables: ${missingEnv.join(', ')}`);
+  console.error('   Add them to your .env file. See .env.example for reference.');
+  process.exit(1);
+}
+if (process.env.JWT_SECRET.length < 32) {
+  console.error('❌ JWT_SECRET must be at least 32 characters for security');
+  process.exit(1);
+}
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -25,12 +46,12 @@ const {
 
 // Import routes
 const apiV1Routes = require('./api/v1');
+const { supabase: _supabase } = require('./db/supabaseClient');
 
-// Legacy routes (for backward compatibility)
-const oldAuthRoutes = require('./routes/authRoutes');
-const oldProfileRoutes = require('./routes/profileRoutes');
-const oldContactRoutes = require('./routes/contactRoutes');
-const oldChatRoutes = require('./routes/chatRoutes');
+// Legacy routes (backward compatibility — chat routes removed, auth/profile/contact kept)
+const oldAuthRoutes     = require('./routes/authRoutes');
+const oldProfileRoutes  = require('./routes/profileRoutes');
+const oldContactRoutes  = require('./routes/contactRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -148,14 +169,45 @@ app.use('/api/v1', apiLimiter, apiV1Routes);
 // ============================================
 // LEGACY ROUTES (Backward Compatibility)
 // ============================================
-// Keep old routes working for existing frontend
-app.use('/api/auth', oldAuthRoutes);
+// Chat routes fully removed — all chat endpoints are now on /api/v1/chat/*
+app.use('/api/auth',    oldAuthRoutes);
 app.use('/api/profile', oldProfileRoutes);
 app.use('/api/contact', oldContactRoutes);
-app.use('/api/ai', oldChatRoutes);
-app.use('/api/chat', oldChatRoutes);
 
-logger.info('🔄 Legacy routes mounted for backward compatibility');
+logger.info('🔄 Legacy auth/profile/contact routes mounted for backward compatibility');
+
+// ============================================
+// SITEMAP (auto-generated from published posts)
+// ============================================
+app.get('/sitemap.xml', async (req, res) => {
+  try {
+    const { data: posts } = await _supabase
+      .from('posts')
+      .select('slug, updated_at')
+      .eq('status', 'published');
+
+    const baseUrl = 'https://www.mintpixel.in';
+    const urls = (posts || []).map(p => `
+    <url>
+      <loc>${baseUrl}/posts/${p.slug}</loc>
+      <lastmod>${(p.updated_at || '').split('T')[0]}</lastmod>
+      <changefreq>weekly</changefreq>
+      <priority>0.8</priority>
+    </url>`).join('');
+
+    res.header('Content-Type', 'application/xml');
+    res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}</loc>
+    <priority>1.0</priority>
+  </url>${urls}
+</urlset>`);
+  } catch (err) {
+    logger.error('Sitemap generation failed:', err);
+    res.status(500).send('Sitemap generation failed');
+  }
+});
 
 // ============================================
 // ERROR HANDLING

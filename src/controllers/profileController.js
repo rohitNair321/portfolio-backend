@@ -113,29 +113,44 @@ async function updateMyProfile(req, res) {
       openToWork, open_to_work, skills, experiences, logo_initials, currenttheme, themes
     } = req.body;
 
-
-    // Sanitize all string fields to prevent XSS
-    const payload = {
-      full_name: full_name ? validator.escape(full_name) : (name ? validator.escape(name) : null),
-      description: description ? validator.escape(description) : null,
-      email: email ? validator.escape(email) : null,
-      primary_phone: primaryPhone ? validator.escape(primaryPhone) : (primary_phone ? validator.escape(primary_phone) : null),
-      secondary_phone: secondaryPhone ? validator.escape(secondaryPhone) : (secondary_phone ? validator.escape(secondary_phone) : null),
-      location: location ? validator.escape(location) : null,
-      website: website ? validator.escape(website) : null,
-      linkedin: linkedin ? validator.escape(linkedin) : null,
-      github: github ? validator.escape(github) : null,
-      logo_initials: logo_initials ? validator.escape(logo_initials) : null,
-      open_to_work:
-        openToWork === 'true' ||
-        openToWork === true ||
-        open_to_work === 'true' ||
-        open_to_work === true,
-      currenttheme: currenttheme ? validator.escape(currenttheme) : null,
-      themes: parseJsonField(themes),
-      skills: parseJsonField(skills),
-      experiences: parseJsonField(experiences)
+    // Partial-update payload: only include fields that were actually sent with a value.
+    // Empty strings and undefined are skipped so existing DB values are never wiped.
+    const payload = {};
+    const setStr = (key, val) => {
+      if (val != null && val !== '') payload[key] = validator.escape(String(val));
     };
+
+    setStr('full_name', full_name || name);
+    setStr('description', description);
+    setStr('email', email);
+    setStr('primary_phone', primaryPhone || primary_phone);
+    setStr('secondary_phone', secondaryPhone || secondary_phone);
+    setStr('location', location);
+    setStr('website', website);
+    setStr('linkedin', linkedin);
+    setStr('github', github);
+    setStr('logo_initials', logo_initials);
+    setStr('currenttheme', currenttheme);
+
+    // Boolean: only include if the key was present in the request body
+    const openRaw = openToWork !== undefined ? openToWork : open_to_work;
+    if (openRaw !== undefined) {
+      payload.open_to_work = openRaw === 'true' || openRaw === true;
+    }
+
+    // Arrays: only update if the field was actually sent
+    if (skills !== undefined) {
+      const parsed = parseJsonField(skills);
+      if (Array.isArray(parsed)) payload.skills = parsed;
+    }
+    if (experiences !== undefined) {
+      const parsed = parseJsonField(experiences);
+      if (Array.isArray(parsed)) payload.experiences = parsed;
+    }
+    if (themes !== undefined) {
+      const parsed = parseJsonField(themes);
+      if (Array.isArray(parsed)) payload.themes = parsed;
+    }
 
     const files = req.files || {};
     if (files.avatar && files.avatar[0]) {
@@ -178,8 +193,6 @@ async function updateMyProfile(req, res) {
       const { data: publicData } = supabase.storage.from(BUCKET).getPublicUrl(resumePath);
       payload.resume_url = publicData.publicUrl;
     }
-
-    Object.keys(payload).forEach(k => payload[k] === undefined && delete payload[k]);
 
     const saved = await upsertProfileRow(userId, payload);
     
@@ -235,10 +248,60 @@ async function downloadResume(req, res) {
     return res.status(500).json({ message: 'Error creating signed url', details: err.message || err });
   }
 }
-// #endregion
+//#endregion
+
+//#region DELETE /api/v1/profile/resume deleteResume
+async function deleteResume(req, res) {
+  try {
+    const userId = req.user.id;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('resume_url')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+    if (!data || !data.resume_url) {
+      return res.status(404).json({ message: 'No resume on file' });
+    }
+
+    // Extract the storage object path from the public URL.
+    // Public URL format: {SUPABASE_URL}/storage/v1/object/public/{BUCKET}/{path}
+    const prefix = `${process.env.SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+    const storagePath = data.resume_url.startsWith(prefix)
+      ? data.resume_url.slice(prefix.length)
+      : null;
+
+    if (storagePath) {
+      const { error: delErr } = await supabase.storage.from(BUCKET).remove([storagePath]);
+      if (delErr) {
+        // Log but don't abort — still clear the DB record
+        console.warn('Resume storage delete failed (non-fatal):', delErr.message);
+      }
+    }
+
+    // Clear resume_url in the profile row
+    const saved = await upsertProfileRow(userId, { resume_url: null });
+
+    const projectCount = (saved.experiences || []).reduce((t, e) => t + (e.projects?.length || 0), 0);
+    const companyCount = (saved.experiences || []).length;
+    const currentCompany = (saved.experiences || []).find(e => e.present)?.company || null;
+    saved.projectCount = projectCount;
+    saved.companyCount = companyCount;
+    saved.currentCompany = currentCompany;
+
+    return res.json({ profile: saved });
+  } catch (err) {
+    console.error('deleteResume error', err);
+    return res.status(500).json({ message: 'Error deleting resume', details: err.message || err });
+  }
+}
+//#endregion
 
 module.exports = {
   getMyProfile,
   updateMyProfile,
-  downloadResume
+  downloadResume,
+  deleteResume,
 };

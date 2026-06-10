@@ -4,12 +4,23 @@ const jwt = require('jsonwebtoken');
 const { supabase } = require('../config/database');
 const ApiError = require('../utils/ApiError');
 const logger = require('../config/logger');
-const { JWT, COOKIE } = require('../config/constants');
+const { JWT, COOKIE, PASSWORD_RESET } = require('../config/constants');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
 const isProduction = process.env.NODE_ENV === 'production';
+const passwordResetOtpStore = new Map();
+
+function buildOtp() {
+  const min = 10 ** (PASSWORD_RESET.OTP_LENGTH - 1);
+  const max = (10 ** PASSWORD_RESET.OTP_LENGTH) - 1;
+  return String(Math.floor(min + Math.random() * (max - min + 1)));
+}
+
+function getPasswordResetStoreKey(email) {
+  return email.trim().toLowerCase();
+}
 
 /**
  * Create JWT token
@@ -49,6 +60,7 @@ async function login(email, password) {
     }
 
     // Verify password
+    console.log('Password Hash:', user.password_hash);
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
       logger.warn('Login attempt with invalid password', { email });
@@ -115,14 +127,15 @@ async function initAppData(user) {
 }
 
 /**
- * Forgot password - Send reset email
+ * Forgot password - Generate reset OTP
  */
 async function forgotPassword(email) {
   try {
+    const normalizedEmail = email.trim().toLowerCase();
     const { data: user } = await supabase
       .from('users')
       .select('id, email')
-      .eq('email', email)
+      .eq('email', normalizedEmail)
       .maybeSingle();
 
     // Don't reveal if email exists (security)
@@ -133,25 +146,29 @@ async function forgotPassword(email) {
       };
     }
 
-    // Create reset token
-    const resetToken = jwt.sign(
-      { sub: user.id, type: 'password-reset' },
-      JWT_SECRET,
-      { expiresIn: JWT.RESET_TOKEN_EXPIRY }
+    const otp = buildOtp();
+    // logger.info('OTP', { otp });
+    const otpHash = await bcrypt.hash(otp, BCRYPT_SALT_ROUNDS);
+    const expiresAt = Date.now() + (PASSWORD_RESET.OTP_EXPIRY_MINUTES * 60 * 1000);
+
+    passwordResetOtpStore.set(getPasswordResetStoreKey(user.email), {
+      userId: user.id,
+      otpHash,
+      expiresAt,
+    });
+
+    console.log(
+      `[RESET_PASSWORD_OTP] email=${user.email} otp=${otp} expiresInMinutes=${PASSWORD_RESET.OTP_EXPIRY_MINUTES}`
     );
 
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-    // TODO: Send email using your email service (Resend, SendGrid, etc.)
-    // For now, just log it
     logger.info('Password reset requested', {
       userId: user.id,
       email: user.email,
-      resetLink,
+      otpExpiresInMinutes: PASSWORD_RESET.OTP_EXPIRY_MINUTES,
     });
 
     return {
-      message: 'If this email exists, reset instructions will be sent.',
+      message: 'If this email exists, a reset OTP has been generated. Check the server console.',
     };
   } catch (error) {
     logger.error('forgotPassword error:', error);
@@ -162,18 +179,22 @@ async function forgotPassword(email) {
 /**
  * Reset password
  */
-async function resetPassword(token, newPassword) {
+async function resetPassword(email, otp, newPassword) {
   try {
-    // Verify token
-    let payload;
-    try {
-      payload = jwt.verify(token, JWT_SECRET);
-      if (payload.type !== 'password-reset') {
-        throw ApiError.badRequest('Invalid reset token');
-      }
-    } catch (err) {
-      logger.warn('Invalid reset token attempt');
-      throw ApiError.badRequest('Reset token expired or invalid');
+    const normalizedEmail = email.trim().toLowerCase();
+    const storeKey = getPasswordResetStoreKey(normalizedEmail);
+    const storedReset = passwordResetOtpStore.get(storeKey);
+
+    if (!storedReset || storedReset.expiresAt < Date.now()) {
+      passwordResetOtpStore.delete(storeKey);
+      logger.warn('Invalid or expired reset OTP attempt', { email: normalizedEmail });
+      throw ApiError.badRequest('Reset OTP expired or invalid');
+    }
+
+    const isOtpValid = await bcrypt.compare(String(otp), storedReset.otpHash);
+    if (!isOtpValid) {
+      logger.warn('Incorrect reset OTP attempt', { email: normalizedEmail });
+      throw ApiError.badRequest('Reset OTP expired or invalid');
     }
 
     // Hash new password
@@ -183,14 +204,19 @@ async function resetPassword(token, newPassword) {
     const { error } = await supabase
       .from('users')
       .update({ password_hash: hashedPassword })
-      .eq('id', payload.sub);
+      .eq('id', storedReset.userId);
 
     if (error) {
       logger.error('Failed to reset password:', error);
       throw ApiError.internal('Failed to reset password');
     }
 
-    logger.info('Password reset successful', { userId: payload.sub });
+    passwordResetOtpStore.delete(storeKey);
+
+    logger.info('Password reset successful', {
+      userId: storedReset.userId,
+      email: normalizedEmail,
+    });
 
     return { message: 'Password reset successful' };
   } catch (error) {

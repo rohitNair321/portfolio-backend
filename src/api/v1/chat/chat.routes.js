@@ -2,6 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const chatController = require('./chat.controller');
+// balance is imported via chatController.getBalance
 const { chatValidators, validate } = require('../../../utils/validators');
 const {
   optionalAuth,
@@ -181,6 +182,13 @@ router.get(
   verifyToken,
   requireAdmin,
   chatController.getChatStats
+);
+
+router.get(
+  '/balance',
+  verifyToken,
+  requireAdmin,
+  chatController.getBalance
 );
 
 module.exports = router;

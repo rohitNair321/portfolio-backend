@@ -69,13 +69,13 @@ const forgotPassword = catchAsync(async (req, res) => {
 
 /**
  * @route   POST /api/v1/auth/reset-password
- * @desc    Reset password with token
+ * @desc    Reset password with OTP
  * @access  Public
  */
 const resetPassword = catchAsync(async (req, res) => {
-  const { token, password } = req.body;
+  const { email, otp, newPassword } = req.body;
 
-  const result = await authService.resetPassword(token, password);
+  const result = await authService.resetPassword(email, otp, newPassword);
   const response = ApiResponse.success(null, result.message);
 
   res.status(response.statusCode).json(response);

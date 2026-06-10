@@ -2,10 +2,10 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { supabase } = require('../db/supabaseClient');
+const authService = require('../services/authService');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 const TOKEN_EXPIRY = '1d';
-const BCRYPT_SALT_ROUNDS = Number(process.env.BCRYPT_SALT_ROUNDS || 10);
 const PROFILE_OWNER_ID = process.env.PROFILE_OWNER_ID;
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -17,7 +17,7 @@ function createToken(user) {
     {
       sub: user.id,
       email: user.email,
-      role: user.role // 👈 MUST be explicit
+      role: user.role
     },
     JWT_SECRET,
     { expiresIn: TOKEN_EXPIRY }
@@ -28,16 +28,15 @@ async function initAppData(req, res) {
   try {
     const user = req.user;
     const id = user?.id || PROFILE_OWNER_ID;
-    const role = user?.role || "guest";
+    const role = user?.role || 'guest';
     const email = user?.email || null;
 
-    // Refresh cookie for active sessions
     if (user && user.role !== 'guest') {
       const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
       if (token) {
-        res.cookie("token", token, {
+        res.cookie('token', token, {
           httpOnly: true,
-          sameSite: isProduction ? "none" : "lax",
+          sameSite: isProduction ? 'none' : 'lax',
           secure: isProduction,
           maxAge: 24 * 60 * 60 * 1000,
           path: '/'
@@ -45,13 +44,13 @@ async function initAppData(req, res) {
       }
     }
 
-    const { data } = await supabase
+    await supabase
       .from('profiles')
       .select('themes, currenttheme')
       .eq('id', id)
       .maybeSingle();
 
-    return res.status(200).json({ id, role, email});
+    return res.status(200).json({ id, role, email });
   } catch (err) {
     console.error('initAppData error:', err);
     return res.status(500).json({ message: 'Unexpected error.' });
@@ -91,7 +90,6 @@ async function loginUser(req, res) {
       return res.status(401).json({ message: 'Invalid email or password.' });
     }
 
-    // Update last login (non-blocking)
     await supabase
       .from('users')
       .update({ last_login: new Date().toISOString() })
@@ -99,13 +97,14 @@ async function loginUser(req, res) {
 
     const token = createToken(user);
 
-    res.cookie("token", token, {
+    res.cookie('token', token, {
       httpOnly: true,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: isProduction ? 'none' : 'lax',
       secure: isProduction,
       maxAge: 24 * 60 * 60 * 1000,
       path: '/'
     });
+
     return res.status(200).json({
       message: 'Admin login successful.',
       user: {
@@ -113,7 +112,7 @@ async function loginUser(req, res) {
         email: user.email,
         role: user.role
       },
-      token: token
+      token
     });
   } catch (err) {
     console.error('Login error:', err);
@@ -133,57 +132,13 @@ async function forgotPassword(req, res) {
       return res.status(400).json({ message: 'Email is required.' });
     }
 
-    const { data: user } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('email', email)
-      .maybeSingle();
-
-    // Always return success (prevent enumeration)
-    if (!user) {
-      return res.status(200).json({
-        message: 'If this email exists, reset instructions will be sent.'
-      });
-    }
-
-    const resetToken = jwt.sign(
-      { sub: user.id, type: 'password-reset' },
-      JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    const resetLink =
-      `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-
-    // TODO: Replace with Resend (recommended)
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS
-      }
-    });
-
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM,
-      to: user.email,
-      subject: 'Reset your admin password',
-      html: `
-        <p>You requested a password reset.</p>
-        <p><a href="${resetLink}">Reset Password</a></p>
-        <p>This link expires in 1 hour.</p>
-      `
-    });
-
-    return res.status(200).json({
-      message: 'If this email exists, reset instructions will be sent.'
-    });
+    const result = await authService.forgotPassword(email);
+    return res.status(200).json({ message: result.message });
   } catch (err) {
     console.error('Forgot password error:', err);
-    return res.status(500).json({ message: 'Unexpected error.' });
+    return res.status(err.statusCode || 500).json({
+      message: err.message || 'Unexpected error.'
+    });
   }
 }
 
@@ -194,44 +149,25 @@ async function forgotPassword(req, res) {
  */
 async function resetPassword(req, res) {
   try {
-    const { token, password } = req.body;
+    const { email, otp, newPassword } = req.body;
 
-    if (!token || !password) {
-      return res.status(400).json({ message: 'Token and password are required.' });
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: 'Email, OTP, and new password are required.' });
     }
 
-    let payload;
-    try {
-      payload = jwt.verify(token, JWT_SECRET);
-      if (payload.type !== 'password-reset') {
-        return res.status(400).json({ message: 'Invalid reset token.' });
-      }
-    } catch {
-      return res.status(400).json({ message: 'Reset token expired or invalid.' });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
-
-    const { error } = await supabase
-      .from('users')
-      .update({ password_hash: hashedPassword })
-      .eq('id', payload.sub);
-
-    if (error) {
-      return res.status(500).json({ message: 'Failed to reset password.' });
-    }
-
-    return res.status(200).json({ message: 'Password reset successful.' });
+    const result = await authService.resetPassword(email, otp, newPassword);
+    return res.status(200).json({ message: result.message });
   } catch (err) {
     console.error('Reset password error:', err);
-    return res.status(500).json({ message: 'Unexpected error.' });
+    return res.status(err.statusCode || 500).json({
+      message: err.message || 'Unexpected error.'
+    });
   }
 }
 
 async function updatePassword(req, res) {
   try {
     const { email, currentPassword, newPassword } = req.body;
-    // 1. Fetch the user's current record from Supabase
     const { data: user, error: fetchError } = await supabase
       .from('users')
       .select('password_hash, email')
@@ -239,20 +175,17 @@ async function updatePassword(req, res) {
       .single();
 
     if (fetchError || !user) {
-      return res.status(404).json({ message: "Administrator record not found." });
+      return res.status(404).json({ message: 'Administrator record not found.' });
     }
 
-    // 2. Verify the CURRENT password
     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({ message: "Current password verification failed." });
+      return res.status(401).json({ message: 'Current password verification failed.' });
     }
 
-    // 3. Hash the NEW password
     const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
 
-    // 4. Update Supabase
     const { error: updateError } = await supabase
       .from('users')
       .update({
@@ -267,28 +200,27 @@ async function updatePassword(req, res) {
 
     return res.status(200).json({
       success: true,
-      message: "Credentials updated in secure storage."
+      message: 'Credentials updated in secure storage.'
     });
-
   } catch (error) {
-    console.error("Password Update Error:", error);
-    res.status(500).json({ message: "Internal server error during password update." });
+    console.error('Password Update Error:', error);
+    res.status(500).json({ message: 'Internal server error during password update.' });
   }
-};
+}
 
 async function logout(req, res) {
   try {
-    res.clearCookie("token", {
+    res.clearCookie('token', {
       httpOnly: true,
-      sameSite: isProduction ? "none" : "lax",
+      sameSite: isProduction ? 'none' : 'lax',
       secure: isProduction,
-      path: '/' 
+      path: '/'
     });
 
-    return res.status(200).json({ message: "Logged out successfully" });
+    return res.status(200).json({ message: 'Logged out successfully' });
   } catch (err) {
-    console.error("Logout error:", err);
-    return res.status(500).json({ message: "Logout failed" });
+    console.error('Logout error:', err);
+    return res.status(500).json({ message: 'Logout failed' });
   }
 }
 
